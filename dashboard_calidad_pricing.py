@@ -315,6 +315,25 @@ table{{width:100%;border-collapse:collapse;font-size:12px}}
 th{{background:#f5f7f9;padding:8px;text-align:left;font-weight:700;color:#555;border-bottom:2px solid #e0e0e0;position:sticky;top:0}}
 td{{padding:7px 8px;border-bottom:1px solid #f0f0f0}}
 tr:hover td{{background:#f5f8fa}} td:first-child{{font-weight:600;color:#0d3b4f}}
+/* Date picker */
+.dp-popup{{display:none;position:absolute;top:calc(100% + 6px);left:0;background:#fff;border:1px solid #ddd;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.18);z-index:200;padding:20px;min-width:540px}}
+.dp-popup.open{{display:block}}
+.dp-row{{display:flex;gap:24px}}
+.dp-cal{{flex:1;min-width:240px}}
+.dp-title{{font-size:12px;font-weight:700;color:#555;text-align:center;margin-bottom:8px}}
+.dp-nav{{display:flex;align-items:center;gap:4px;margin-bottom:8px;justify-content:center}}
+.dp-nav button{{border:none;background:none;cursor:pointer;font-size:14px;color:#555;padding:4px 8px;border-radius:4px}}
+.dp-nav button:hover{{background:#e8e8e8}}
+.dp-sel{{border:1px solid #ddd;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#0d3b4f}}
+.dp-grid{{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}}
+.dp-grid .dp-hdr{{font-size:10px;font-weight:700;color:#888;padding:4px 0}}
+.dp-grid .dp-day{{font-size:12px;padding:6px 2px;border-radius:6px;cursor:pointer;transition:.15s;color:#333}}
+.dp-grid .dp-day:hover{{background:#e8f7f9}}
+.dp-grid .dp-day.sel{{background:#3BA5B5;color:#fff;font-weight:700}}
+.dp-grid .dp-day.range{{background:#e0f2f4;color:#0d3b4f}}
+.dp-grid .dp-day.other{{color:#ccc}}
+.dp-grid .dp-day.today{{border:2px solid #3BA5B5}}
+.dp-actions{{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;padding-top:12px;border-top:1px solid #eee}}
 .metric-desc{{background:#f5f8fa;border-left:3px solid #3BA5B5;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:16px;font-size:12px;color:#555;line-height:1.6}}
 .metric-desc code{{background:#e8e8e8;padding:1px 5px;border-radius:3px;font-size:11px}}
 </style></head><body>
@@ -331,8 +350,24 @@ tr:hover td{{background:#f5f8fa}} td:first-child{{font-weight:600;color:#0d3b4f}
   <div class="filter-bar">
     <span class="filter-label">Periodo:</span>
     <select id="sel-gran" class="sel-ctrl" style="min-width:110px" onchange="applyFilters()"><option value="mes" selected>Mes</option><option value="trimestre">Trimestre</option><option value="ano">Ano</option></select>
-    <span class="filter-label">Desde:</span><select id="sel-desde" class="sel-ctrl" style="min-width:110px"></select>
-    <span class="filter-label">Hasta:</span><select id="sel-hasta" class="sel-ctrl" style="min-width:110px"></select>
+    <div class="dd-wrap" id="dd-daterange">
+      <button class="dd-trigger" id="btn-daterange" onclick="toggleDatePicker()" style="min-width:220px"></button>
+      <div class="dp-popup" id="dp-popup">
+        <div class="dp-row">
+          <div class="dp-cal">
+            <div class="dp-title">Fecha de inicio</div>
+            <div class="dp-nav"><select id="dp-m0" class="dp-sel" onchange="dpRender(0)"></select><button onclick="dpMove(0,-1)">&#9664;</button><button onclick="dpMove(0,1)">&#9654;</button></div>
+            <div class="dp-grid" id="dp-grid0"></div>
+          </div>
+          <div class="dp-cal">
+            <div class="dp-title">Fecha de finalizacion</div>
+            <div class="dp-nav"><select id="dp-m1" class="dp-sel" onchange="dpRender(1)"></select><button onclick="dpMove(1,-1)">&#9664;</button><button onclick="dpMove(1,1)">&#9654;</button></div>
+            <div class="dp-grid" id="dp-grid1"></div>
+          </div>
+        </div>
+        <div class="dp-actions"><button class="btn btn-secondary" onclick="dpCancel()">Cancelar</button><button class="btn btn-primary" onclick="dpApply()">Aplicar</button></div>
+      </div>
+    </div>
     <div class="filter-sep"></div>
     <div class="dd-wrap" id="dd-metro"><button class="dd-trigger" onclick="toggleDD('metro')">Metro: Todas</button><div class="dd-panel" id="panel-metro"></div></div>
     <div class="dd-wrap" id="dd-ciudad"><button class="dd-trigger" onclick="toggleDD('ciudad')">Ciudad: Todas</button><div class="dd-panel" id="panel-ciudad"></div></div>
@@ -406,10 +441,6 @@ function initFilters(){{
   buildDD('comite',['70','71'],'Todos');
   buildDD('source',co?META.sources_co:META.sources_mx,'Todas');
   const cp=document.getElementById('panel-comite'); cp.querySelectorAll('label').forEach(l=>{{const cb=l.querySelector('input');if(cb.value==='70')l.childNodes[1].textContent=' F70 Manual';if(cb.value==='71')l.childNodes[1].textContent=' F71 Automatico';}});
-  // Desde/Hasta
-  const sd=document.getElementById('sel-desde'),sh=document.getElementById('sel-hasta');
-  let h1='',h2=''; META.meses.forEach((m,i)=>{{h1+=`<option value="${{m}}">${{META.meses_labels[i]}}</option>`;h2+=`<option value="${{m}}">${{META.meses_labels[i]}}</option>`;}});
-  sd.innerHTML=h1;sh.innerHTML=h2; sd.value=state.desde; sh.value=state.hasta;
 }}
 
 // ── State ──
@@ -426,8 +457,8 @@ function setSection(s,el){{
   document.getElementById('dd-source').style.display=s==='src'?'':'none';
   renderSection();
 }}
-function applyFilters(){{ state.metro=readF('metro');state.ciudad=readF('ciudad');state.zona=readF('zona');state.tipo=readF('tipo');state.comite=readF('comite');state.source=readF('source'); state.gran=document.getElementById('sel-gran').value;state.desde=document.getElementById('sel-desde').value;state.hasta=document.getElementById('sel-hasta').value; renderKPIs();renderSection();renderSummary(); }}
-function clearFilters(){{ state.metro=['__all__'];state.ciudad=['__all__'];state.zona=['__all__'];state.tipo=['__all__'];state.comite=['__all__'];state.source=['__all__'];state.gran='mes';state.desde=META.meses[0];state.hasta=META.meses[META.meses.length-1]; initFilters();document.getElementById('sel-gran').value='mes'; renderKPIs();renderSection();renderSummary(); }}
+function applyFilters(){{ state.metro=readF('metro');state.ciudad=readF('ciudad');state.zona=readF('zona');state.tipo=readF('tipo');state.comite=readF('comite');state.source=readF('source'); state.gran=document.getElementById('sel-gran').value; renderKPIs();renderSection(); }}
+function clearFilters(){{ state.metro=['__all__'];state.ciudad=['__all__'];state.zona=['__all__'];state.tipo=['__all__'];state.comite=['__all__'];state.source=['__all__'];state.gran='mes';state.desde=META.meses[0];state.hasta=META.meses[META.meses.length-1]; initFilters();document.getElementById('sel-gran').value='mes';dpUpdateBtn(); renderKPIs();renderSection(); }}
 
 // ── Data ──
 function fd(key,opts,ctry){{
@@ -595,8 +626,98 @@ function renderPoly(){{
 }}
 
 
+// ── Date Picker ──
+let dpState={{d0:null,d1:null,nav0:null,nav1:null}};
+const MES_NAMES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+const DOW=['L','M','X','J','V','S','D'];
+
+function toggleDatePicker(){{
+  const pp=document.getElementById('dp-popup');
+  if(pp.classList.contains('open')){{pp.classList.remove('open');return;}}
+  // Init nav to current desde/hasta months
+  const[y0,m0]=state.desde.split('-').map(Number);
+  const[y1,m1]=state.hasta.split('-').map(Number);
+  dpState.d0=new Date(y0,m0-1,1); dpState.d1=new Date(y1,m1-1,1);
+  dpState.nav0=new Date(y0,m0-1,1); dpState.nav1=new Date(y1,m1-1,1);
+  dpPopulateSelects(); dpRender(0); dpRender(1);
+  pp.classList.add('open');
+}}
+function dpPopulateSelects(){{
+  [0,1].forEach(idx=>{{
+    const sel=document.getElementById('dp-m'+idx);
+    let h='';
+    for(let y=2024;y<=new Date().getFullYear();y++){{
+      for(let m=0;m<12;m++){{
+        const d=new Date(y,m,1);
+        if(d>new Date())break;
+        const val=y+'-'+String(m+1).padStart(2,'0');
+        const lab=MES_NAMES[m]+' '+y;
+        const nav=idx===0?dpState.nav0:dpState.nav1;
+        h+=`<option value="${{val}}"${{nav.getFullYear()===y&&nav.getMonth()===m?' selected':''}}>${{lab}}</option>`;
+      }}
+    }}
+    sel.innerHTML=h;
+  }});
+}}
+function dpMove(idx,dir){{
+  const nav=idx===0?dpState.nav0:dpState.nav1;
+  nav.setMonth(nav.getMonth()+dir);
+  dpPopulateSelects(); dpRender(idx);
+}}
+function dpRender(idx){{
+  const sel=document.getElementById('dp-m'+idx);
+  const[y,m]=sel.value.split('-').map(Number);
+  if(idx===0)dpState.nav0=new Date(y,m-1,1); else dpState.nav1=new Date(y,m-1,1);
+  const grid=document.getElementById('dp-grid'+idx);
+  const selDate=idx===0?dpState.d0:dpState.d1;
+  const first=new Date(y,m-1,1);
+  let startDay=first.getDay(); if(startDay===0)startDay=7; // Mon=1
+  const daysInMonth=new Date(y,m,0).getDate();
+  const today=new Date(); today.setHours(0,0,0,0);
+  let h=DOW.map(d=>`<div class="dp-hdr">${{d}}</div>`).join('');
+  // Blanks for days before 1st
+  for(let i=1;i<startDay;i++) h+=`<div class="dp-day other"></div>`;
+  for(let d=1;d<=daysInMonth;d++){{
+    const dt=new Date(y,m-1,d);
+    let cls='dp-day';
+    if(selDate&&dt.getFullYear()===selDate.getFullYear()&&dt.getMonth()===selDate.getMonth()&&dt.getDate()===selDate.getDate()) cls+=' sel';
+    else if(dpState.d0&&dpState.d1&&dt>dpState.d0&&dt<dpState.d1) cls+=' range';
+    if(dt.getTime()===today.getTime()) cls+=' today';
+    h+=`<div class="${{cls}}" onclick="dpSelect(${{idx}},${{y}},${{m-1}},${{d}})">${{d}}</div>`;
+  }}
+  grid.innerHTML=h;
+}}
+function dpSelect(idx,y,m,d){{
+  const dt=new Date(y,m,d);
+  if(idx===0)dpState.d0=dt; else dpState.d1=dt;
+  // Ensure d0 <= d1
+  if(dpState.d0&&dpState.d1&&dpState.d0>dpState.d1){{
+    if(idx===0)dpState.d1=new Date(dpState.d0); else dpState.d0=new Date(dpState.d1);
+  }}
+  dpRender(0);dpRender(1);
+}}
+function dpApply(){{
+  if(dpState.d0&&dpState.d1){{
+    state.desde=dpState.d0.getFullYear()+'-'+String(dpState.d0.getMonth()+1).padStart(2,'0');
+    state.hasta=dpState.d1.getFullYear()+'-'+String(dpState.d1.getMonth()+1).padStart(2,'0');
+    dpUpdateBtn();
+  }}
+  document.getElementById('dp-popup').classList.remove('open');
+  applyFilters();
+}}
+function dpCancel(){{ document.getElementById('dp-popup').classList.remove('open'); }}
+function dpUpdateBtn(){{
+  const b=document.getElementById('btn-daterange');
+  const i0=META.meses.indexOf(state.desde),i1=META.meses.indexOf(state.hasta);
+  const l0=i0>=0?META.meses_labels[i0]:state.desde, l1=i1>=0?META.meses_labels[i1]:state.hasta;
+  b.textContent=l0+' - '+l1;
+  b.classList.toggle('active',state.desde!==META.meses[0]||state.hasta!==META.meses[META.meses.length-1]);
+}}
+// Close date picker on outside click
+document.addEventListener('click',e=>{{if(!e.target.closest('#dd-daterange'))document.getElementById('dp-popup').classList.remove('open');}});
+
 // ── Init ──
-initFilters();renderKPIs();document.getElementById('dd-source').style.display='none';
+initFilters();dpUpdateBtn();renderKPIs();document.getElementById('dd-source').style.display='none';
 document.getElementById('dd-zona').style.display='none';
 document.getElementById('dd-tipo').style.display='none';
 renderSection();
