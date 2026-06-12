@@ -317,18 +317,12 @@ td{{padding:7px 8px;border-bottom:1px solid #f0f0f0}}
 tr:hover td{{background:#f5f8fa}} td:first-child{{font-weight:600;color:#0d3b4f}}
 .metric-desc{{background:#f5f8fa;border-left:3px solid #3BA5B5;padding:12px 16px;border-radius:0 8px 8px 0;margin-bottom:16px;font-size:12px;color:#555;line-height:1.6}}
 .metric-desc code{{background:#e8e8e8;padding:1px 5px;border-radius:3px;font-size:11px}}
-.summary-banner{{background:linear-gradient(135deg,#e8f7f9,#f0f7f8);border:1px solid #c8e6ea;border-radius:12px;padding:16px 20px;margin-bottom:18px}}
-.summary-banner h3{{font-size:14px;font-weight:700;color:#0d3b4f;margin-bottom:8px}}
-.summary-banner ul{{list-style:none;padding:0}} .summary-banner li{{font-size:13px;color:#444;padding:3px 0;padding-left:16px;position:relative}}
-.summary-banner li::before{{content:'';position:absolute;left:0;top:10px;width:8px;height:8px;border-radius:50%}}
-.summary-banner li.good::before{{background:#2E7D32}} .summary-banner li.warn::before{{background:#EF6C00}} .summary-banner li.bad::before{{background:#D32F2F}} .summary-banner li.info::before{{background:#1976D2}}
 </style></head><body>
 <div class="header">
   <div><h1>Dashboard de Calidad y Consistencia de Pricing</h1><div class="sub">{PERIODO} | Colombia y Mexico</div></div>
   <div class="sub">Generado: {meta['fecha_gen']}</div>
 </div>
 <div class="container">
-  <div id="summary-banner" class="summary-banner"><h3>Resumen Ejecutivo</h3><ul id="summary-list"></ul></div>
   <div class="country-tabs">
     <button class="country-tab active" onclick="setCountry('co',this)">Colombia</button>
     <button class="country-tab" onclick="setCountry('mx',this)">Mexico</button>
@@ -600,28 +594,9 @@ function renderPoly(){{
   renderTable('tbl-poly',['Periodo','Colombia %','Mexico %'],agg.map(r=>[r.label,r.pco!=null?r.pco.toFixed(1)+'%':'-',r.pmx!=null?r.pmx.toFixed(1)+'%':'-']),'poly');
 }}
 
-// ── Summary ──
-function renderSummary(){{
-  const ct=state.country==='compare'?'co':state.country,pais=ct==='co'?'Colombia':'Mexico';
-  const q=fd('qual',{{metro:true,ciudad:true,zona:true,tipo:true,flag:true}},ct),d=fd('diff',{{metro:true,ciudad:true}},ct);
-  const meses=[...new Set(q.map(r=>r.mes))].sort();
-  if(meses.length<2){{document.getElementById('summary-list').innerHTML='<li class="info">Se necesitan al menos 2 meses para generar insights.</li>';return;}}
-  const l=meses[meses.length-1],p=meses[meses.length-2],ml=META.meses_labels[META.meses.indexOf(l)]||l,mp=META.meses_labels[META.meses.indexOf(p)]||p;
-  const items=[];
-  const vL=q.filter(r=>r.mes===l).reduce((s,r)=>s+r.vol,0),vP=q.filter(r=>r.mes===p).reduce((s,r)=>s+r.vol,0),vPct=vP>0?((vL-vP)/vP*100):0;
-  items.push({{cls:vPct>5?'good':vPct<-5?'warn':'info',txt:`Volumen ${{pais}}: ${{fmtN(vL)}} pricings en ${{ml}} (${{vPct>0?'+':''}}${{vPct.toFixed(0)}}% vs ${{mp}})`}});
-  const cvL=wavg(q.filter(r=>r.mes===l),'med_cv','vol');
-  if(cvL!=null)items.push({{cls:cvL<10?'good':cvL<15?'warn':'bad',txt:`CV ${{pais}}: ${{cvL.toFixed(1)}}% (umbral 10%). ${{cvL<10?'Buena homogeneidad':'Dispersion elevada'}}`}});
-  const dfL=wavg(d.filter(r=>r.mes===l),'med_ask_habi','vol');
-  if(dfL!=null)items.push({{cls:dfL<5?'good':dfL<10?'warn':'bad',txt:`Dif. Ask Habi ${{pais}}: ${{dfL.toFixed(2)}}% en ${{ml}}`}});
-  const ageL=wavg(q.filter(r=>r.mes===l),'avg_age','vol');
-  if(ageL!=null)items.push({{cls:ageL<180?'good':ageL<365?'warn':'bad',txt:`Antiguedad comparables ${{pais}}: ${{Math.round(ageL)}} dias (${{ageL<180?'< 6 meses':ageL<365?'6-12 meses':'> 12 meses'}})`}});
-  document.getElementById('summary-list').innerHTML=items.map(it=>`<li class="${{it.cls}}">${{it.txt}}</li>`).join('');
-}}
 
 // ── Init ──
-initFilters();renderKPIs();renderSummary();
-document.getElementById('dd-source').style.display='none';
+initFilters();renderKPIs();document.getElementById('dd-source').style.display='none';
 document.getElementById('dd-zona').style.display='none';
 document.getElementById('dd-tipo').style.display='none';
 renderSection();
