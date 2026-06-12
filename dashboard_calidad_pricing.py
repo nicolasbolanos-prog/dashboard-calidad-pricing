@@ -260,6 +260,7 @@ html = f'''<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard Calidad Pricing - {PERIODO}</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.min.js"></script>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#333;font-size:14px}}
@@ -377,6 +378,8 @@ tr:hover td{{background:#f5f8fa}} td:first-child{{font-weight:600;color:#0d3b4f}
     <div class="dd-wrap" id="dd-source"><button class="dd-trigger" onclick="toggleDD('source')">Fuente: Todas</button><div class="dd-panel" id="panel-source"></div></div>
     <button class="btn btn-primary" onclick="applyFilters()">Aplicar</button>
     <button class="btn btn-secondary" onclick="clearFilters()">Limpiar</button>
+    <div class="filter-sep"></div>
+    <button class="btn btn-export" onclick="exportWord()" style="font-size:12px">&#128196; Descargar Word</button>
   </div>
   <div class="kpi-row">
     <div class="kpi-card"><div class="info" title="Pricings unicos por inmueble/mes (F70+F71)">&#9432;</div><div class="value" id="kpi-vol">-</div><div class="label">Total Pricings</div><div class="delta flat" id="kpi-vol-d"></div></div>
@@ -625,6 +628,93 @@ function renderPoly(){{
   renderTable('tbl-poly',['Periodo','Colombia %','Mexico %'],agg.map(r=>[r.label,r.pco!=null?r.pco.toFixed(1)+'%':'-',r.pmx!=null?r.pmx.toFixed(1)+'%':'-']),'poly');
 }}
 
+
+// ── Export Word ──
+async function exportWord(){{
+  const D=docx;
+  const pais=state.country==='co'?'Colombia':state.country==='mx'?'Mexico':'CO vs MX';
+  const btn=event.target; btn.textContent='Generando...'; btn.disabled=true;
+
+  // Collect all visible canvases
+  const sections=['volumen','diff','comps','cv','age','step','src','poly'];
+  const secNames={{'volumen':'1. Volumen de Pricings','diff':'2. Diferencia Precio Cliente vs Habi','comps':'3. Comparables por Muestra','cv':'4. Coeficiente de Variacion','age':'5. Antiguedad de Comparables','step':'6. Paso de Escalera','src':'7. Fuentes de Comparables','poly':'8. Uso de Polynator'}};
+
+  // Render all sections to capture charts
+  const origSection=state.section;
+  const children=[];
+
+  // Title
+  children.push(new D.Paragraph({{children:[new D.TextRun({{text:'Informe de Calidad y Consistencia de Pricing',bold:true,size:48,color:'3BA5B5'}})],alignment:D.AlignmentType.CENTER,spacing:{{after:200}}}}));
+  children.push(new D.Paragraph({{children:[new D.TextRun({{text:pais+' | '+META.periodo,size:28,color:'666666'}})],alignment:D.AlignmentType.CENTER,spacing:{{after:100}}}}));
+  children.push(new D.Paragraph({{children:[new D.TextRun({{text:'Generado: '+META.fecha_gen+' | Filtros activos: '+(state.country==='compare'?'CO vs MX':pais),size:20,color:'999999'}})],alignment:D.AlignmentType.CENTER,spacing:{{after:400}}}}));
+
+  for(const sec of sections){{
+    // Activate section to render its charts
+    document.querySelectorAll('.section-content').forEach(d=>d.classList.remove('active'));
+    document.getElementById('sec-'+sec).classList.add('active');
+    state.section=sec;
+    renderSection();
+
+    // Wait for charts to render
+    await new Promise(r=>setTimeout(r,300));
+
+    // Section heading
+    children.push(new D.Paragraph({{children:[new D.TextRun({{text:secNames[sec],bold:true,size:32,color:'0d3b4f'}})],spacing:{{before:400,after:200}},heading:D.HeadingLevel.HEADING_1}}));
+
+    // Description
+    children.push(new D.Paragraph({{children:[new D.TextRun({{text:(MDESC[sec]||'').replace(/<[^>]+>/g,' ').replace(/\\s+/g,' '),size:18,color:'888888',italics:true}})],spacing:{{after:200}}}}));
+
+    // Capture all canvases in this section
+    const secEl=document.getElementById('sec-'+sec);
+    const canvases=secEl.querySelectorAll('canvas');
+    for(const canvas of canvases){{
+      try{{
+        const dataUrl=canvas.toDataURL('image/png');
+        const base64=dataUrl.split(',')[1];
+        const img=new D.ImageRun({{data:Uint8Array.from(atob(base64),c=>c.charCodeAt(0)),transformation:{{width:650,height:280}},type:'png'}});
+        children.push(new D.Paragraph({{children:[img],alignment:D.AlignmentType.CENTER,spacing:{{after:200}}}}));
+      }}catch(e){{console.warn('Canvas export failed',e);}}
+    }}
+
+    // Table data
+    const tblEl=secEl.querySelector('table');
+    if(tblEl){{
+      const rows=[...tblEl.querySelectorAll('tr')];
+      if(rows.length>0){{
+        const tblRows=rows.map((tr,ri)=>{{
+          const cells=[...tr.querySelectorAll('th,td')].map(cell=>
+            new D.TableCell({{children:[new D.Paragraph({{children:[new D.TextRun({{text:cell.textContent,bold:ri===0,size:16}})]}})],shading:ri===0?{{fill:'f0f0f0',type:D.ShadingType.CLEAR}}:undefined}})
+          );
+          return new D.TableRow({{children:cells}});
+        }});
+        children.push(new D.Table({{rows:tblRows,width:{{size:100,type:D.WidthType.PERCENTAGE}}}}));
+        children.push(new D.Paragraph({{text:'',spacing:{{after:200}}}}));
+      }}
+    }}
+  }}
+
+  // Restore original section
+  document.querySelectorAll('.section-content').forEach(d=>d.classList.remove('active'));
+  document.getElementById('sec-'+origSection).classList.add('active');
+  state.section=origSection;
+  renderSection();
+
+  // Build doc
+  const doc=new D.Document({{
+    sections:[{{
+      properties:{{page:{{size:{{orientation:D.PageOrientation.LANDSCAPE}},margin:{{top:720,bottom:720,left:720,right:720}}}}}},
+      children
+    }}]
+  }});
+
+  const blob=await D.Packer.toBlob(doc);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`calidad_pricing_${{state.country}}_${{new Date().toISOString().slice(0,10)}}.docx`;
+  a.click();
+
+  btn.textContent='Descargar Word'; btn.disabled=false;
+}}
 
 // ── Date Picker ──
 let dpState={{d0:null,d1:null,nav0:null,nav1:null}};
