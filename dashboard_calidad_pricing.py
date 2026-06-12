@@ -16,8 +16,8 @@ os.makedirs(OUT, exist_ok=True)
 # ── Periodo: historico completo desde 2024 ──
 HOY = date.today()
 FECHA_INI = '2024-01-01'
-FECHA_FIN_EXCL = HOY.replace(day=1).strftime('%Y-%m-%d')
-_ultimo_mes = HOY.replace(day=1) - pd.Timedelta(days=1)
+FECHA_FIN_EXCL = (HOY + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+_ultimo_mes = HOY
 _meses = pd.date_range(start=FECHA_INI, end=_ultimo_mes, freq='MS')
 MESES = [m.strftime('%Y-%m') for m in _meses]
 MN = {'01':'Ene','02':'Feb','03':'Mar','04':'Abr','05':'May','06':'Jun',
